@@ -96,6 +96,19 @@ _.latex = function() {
     return latex + '{' + (child.latex() || ' ') + '}';
   });
 };
+_.expr = function() {
+  var shortCmd = this.cmd;
+  if (shortCmd.charAt(0) == "\\") {
+     var end = shortCmd.length;
+     if (shortCmd.charAt(end - 1) == "(")
+        end--;
+     shortCmd = shortCmd.substring(1, end);
+  }
+  return this.foldChildren({op:shortCmd, params:[]}, function(expr, child) {
+	  expr.params.push(child.expr());
+	  return expr;
+  });
+}
 _.text_template = [''];
 _.text = function() {
   var i = 0;
@@ -128,6 +141,8 @@ _.insertAt = function(cursor) {
   cursor.prev = cmd;
 
   cmd.jQ.insertBefore(cursor.jQ);
+
+  cursor.checkPlaceholder(true, true);
 
   //adjust context-sensitive spacing
   cmd.respace();
@@ -183,6 +198,7 @@ function Symbol(cmd, html, text) {
 _ = Symbol.prototype = new MathCommand;
 _.initBlocks = $.noop;
 _.latex = function(){ return this.cmd; };
+_.expr = function() { return this.cmd; };
 _.text = function(){ return this.text_template; };
 _.placeCursor = $.noop;
 _.isEmpty = function(){ return true; };
@@ -199,6 +215,121 @@ _.latex = function() {
     return latex + child.latex();
   });
 };
+_.expr = function() {
+  function isDigit(ch) {
+    return /^\d$/.test(ch);
+  }
+
+  function isLetter(ch) {
+    return /^[a-zA-Z]+$/.test(ch);
+  }
+
+  function trim (str) {
+    if (typeof(str) !== "string")
+      return str;
+    return str.replace(/^\s+/g,'').replace(/\s+$/g,'')
+  } 
+
+  function readNextToken() {
+    var item;
+    curValue = "";
+    if (curIndex >= items.length) {
+      curToken = 0;
+      return;
+    }
+    item = items[curIndex];
+    if (trim(item) === "\\cdot")
+      item = "*";
+    if ((item == "*") || (item == "+") || (item == "-")) {
+      curIndex++;
+      curValue = item;
+      curToken = item;
+    }
+    else if (isDigit(item)) {
+      curValue = readFloat(item);
+      curToken = "number";
+    }
+    else {
+      curIndex++;
+      curValue = item;
+      curToken = "elem";
+    }
+  }
+
+  function readFloat(item) {
+    var str = "";
+    while (isDigit(item) || (item == ".")) {
+      str += item;
+      curIndex++;
+      item = items[curIndex];
+    }
+    return parseFloat(str);
+  }
+
+  function primaryExpr () {
+    var expr;
+    expr = curValue;
+    readNextToken();
+    return expr;
+  }
+
+  function unaryExpr() {
+    var expr;
+    if ((curToken == "+") || (curToken == "-")) {
+      var prevToken = curToken;
+      readNextToken();
+      expr = {op:curValue, params:[unaryExpr()]};
+    }
+    else
+      expr = primaryExpr();
+    return expr;
+  }
+
+  function multiplicativeExpr() {
+    var stack = [unaryExpr()];
+
+    while(curToken === "elem") {
+      var expr2 = primaryExpr();
+      if ((typeof(expr2) === "object") && (expr2.op == "^")) {
+        var last = stack.pop();
+        stack.push({op:"^", params:[last, expr2.params[0]]});
+      }
+      else
+        stack.push(expr2);
+    }
+    expr = stack.pop();
+    while (stack.length > 0) {
+      expr = {op:"*", params:[stack.pop(), expr]};
+    }
+
+    while (curToken == "*") {
+      readNextToken();
+      expr = {op:"*", params:[expr, multiplicativeExpr()]};
+    }
+    return expr;
+  }
+
+  function additiveExpr() {
+    var expr = multiplicativeExpr();
+    while ((curToken == "+") || (curToken == "-")) {
+      var prevToken = curToken;
+      readNextToken();
+      expr = {op:prevToken, params:[expr, multiplicativeExpr()]};
+    }
+    return expr;
+  }
+  var items = this.foldChildren([], function(items, child) {
+    items.push(child.expr());
+    return items;
+  });
+  var curToken = 0;
+  var curIndex = 0;
+  var curValue = "";
+
+  readNextToken();
+  return additiveExpr();
+}
+
 _.text = function() {
   return this.firstChild === this.lastChild ?
     this.firstChild.text() :
@@ -286,7 +417,14 @@ _.blockify = function() {
   self.each(function(el){ el.parent = newBlock; });
 
   newBlock.jQ = self.jQ;
-
   return newBlock;
 };
+_.checkPlaceholders = function() {
+  var tmpCursor = new Cursor(this);
+  this.cursor.prependTo(this);
+  this.cursor.checkPlaceholder(false, true);
+  this.cursor.appendTo(this);
+  this.cursor.checkPlaceholder(false, true);
+  this.renderCommand();
+}
 

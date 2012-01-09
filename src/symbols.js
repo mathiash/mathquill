@@ -2,7 +2,7 @@
  * Symbols and Special Characters
  *********************************/
 
-LatexCmds.f = bind(Symbol, 'f', '<var class="florin">&fnof;</var><span></span>');
+LatexCmds.f = bind(Symbol, 'f', '<var class="florin">&fnof;</var>');
 
 function Variable(ch, html) {
   Symbol.call(this, ch, '<var>'+(html || ch)+'</var>');
@@ -162,9 +162,8 @@ _.respace = function() {
 };
 
 LatexCmds['+'] = bind(PlusMinus, '+');
-//yes, these are different dashes, I think one is an en dash and the other is a hyphen
-LatexCmds['–'] = LatexCmds['-'] = bind(PlusMinus, '-', '&minus;');
-LatexCmds['±'] = LatexCmds.pm = LatexCmds.plusmn = LatexCmds.plusminus =
+LatexCmds['-'] = bind(PlusMinus, '-', '&minus;');
+LatexCmds.pm = LatexCmds.plusmn = LatexCmds.plusminus =
   bind(PlusMinus,'\\pm ','&plusmn;');
 LatexCmds.mp = LatexCmds.mnplus = LatexCmds.minusplus =
   bind(PlusMinus,'\\mp ','&#8723;');
@@ -190,10 +189,10 @@ LatexCmds.times = proto(BinaryOperator, function(replacedFragment, latex) {
   BinaryOperator.call(this, '\\times ', '&times;', '[x]')
 });
 
-LatexCmds['÷'] = LatexCmds.div = LatexCmds.divide = LatexCmds.divides =
+LatexCmds.div = LatexCmds.divide = LatexCmds.divides =
   bind(BinaryOperator,'\\div ','&divide;', '[/]');
 
-LatexCmds['≠'] = LatexCmds.ne = LatexCmds.neq = bind(BinaryOperator,'\\ne ','&ne;');
+LatexCmds.ne = LatexCmds.neq = bind(BinaryOperator,'\\ne ','&ne;');
 
 LatexCmds.ast = LatexCmds.star = LatexCmds.loast = LatexCmds.lowast =
   bind(BinaryOperator,'\\ast ','&lowast;');
@@ -206,15 +205,15 @@ LatexCmds.because = bind(BinaryOperator,'\\because ','&#8757;');
 
 LatexCmds.prop = LatexCmds.propto = bind(BinaryOperator,'\\propto ','&prop;');
 
-LatexCmds['≈'] = LatexCmds.asymp = LatexCmds.approx = bind(BinaryOperator,'\\approx ','&asymp;');
+LatexCmds.asymp = LatexCmds.approx = bind(BinaryOperator,'\\approx ','&asymp;');
 
 LatexCmds.lt = bind(BinaryOperator,'<','&lt;');
 
 LatexCmds.gt = bind(BinaryOperator,'>','&gt;');
 
-LatexCmds['≤'] = LatexCmds.le = LatexCmds.leq = bind(BinaryOperator,'\\le ','&le;');
+LatexCmds.le = LatexCmds.leq = bind(BinaryOperator,'\\le ','&le;');
 
-LatexCmds['≥'] = LatexCmds.ge = LatexCmds.geq = bind(BinaryOperator,'\\ge ','&ge;');
+LatexCmds.ge = LatexCmds.geq = bind(BinaryOperator,'\\ge ','&ge;');
 
 LatexCmds.isin = LatexCmds['in'] = bind(BinaryOperator,'\\in ','&isin;');
 
@@ -266,10 +265,10 @@ function BigSymbol(ch, html) {
 }
 BigSymbol.prototype = new Symbol; //so instanceof will work
 
-LatexCmds['∑'] = LatexCmds.sum = LatexCmds.summation = bind(BigSymbol,'\\sum ','&sum;');
-LatexCmds['∏'] = LatexCmds.prod = LatexCmds.product = bind(BigSymbol,'\\prod ','&prod;');
+LatexCmds.sum = LatexCmds.summation = bind(BigSymbol,'\\sum ','&sum;');
+LatexCmds.prod = LatexCmds.product = bind(BigSymbol,'\\prod ','&prod;');
 LatexCmds.coprod = LatexCmds.coproduct = bind(BigSymbol,'\\coprod ','&#8720;');
-LatexCmds['∫'] = LatexCmds.int = LatexCmds.integral = bind(BigSymbol,'\\int ','&int;');
+LatexCmds.int = LatexCmds.integral = LatexCmds['∫'] = bind(BigSymbol,'\\int ','&int;');
 
 
 
@@ -437,9 +436,9 @@ LatexCmds.setminus = LatexCmds.smallsetminus =
   bind(VanillaSymbol,'\\setminus ','&#8726;');
 
 LatexCmds.not = //bind(Symbol,'\\not ','<span class="not">/</span>');
-LatexCmds['¬'] = LatexCmds.neg = bind(VanillaSymbol,'\\neg ','&not;');
+LatexCmds.neg = bind(VanillaSymbol,'\\neg ','&not;');
 
-LatexCmds['…'] = LatexCmds.dots = LatexCmds.ellip = LatexCmds.hellip =
+LatexCmds.dots = LatexCmds.ellip = LatexCmds.hellip =
 LatexCmds.ellipsis = LatexCmds.hellipsis =
   bind(VanillaSymbol,'\\dots ','&hellip;');
 
@@ -531,7 +530,7 @@ _.respace = function()
 
 LatexCmds.ln =
 LatexCmds.lg =
-LatexCmds.log =
+LatexCmds.log = FnCall;
 LatexCmds.span =
 LatexCmds.proj =
 LatexCmds.det =
@@ -552,7 +551,7 @@ LatexCmds.lim = NonItalicizedFunction;
     LatexCmds[trig[i]+'h'] =
     LatexCmds['a'+trig[i]] = LatexCmds['arc'+trig[i]] =
     LatexCmds['a'+trig[i]+'h'] = LatexCmds['arc'+trig[i]+'h'] =
-      NonItalicizedFunction;
+      FnCall;
   }
 }());
 

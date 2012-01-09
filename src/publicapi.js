@@ -4,7 +4,7 @@
 
 //The publicy exposed method of jQuery.prototype, available (and meant to be
 //called) on jQuery-wrapped HTML DOM elements.
-$.fn.mathquill = function(cmd, latex) {
+$.fn.mathquill = function(cmd, latex, acceptedCmds) {
   switch (cmd) {
   case 'redraw':
     this.find(':not(:has(:first))').each(function() {
@@ -54,7 +54,9 @@ $.fn.mathquill = function(cmd, latex) {
       editable = textbox || cmd === 'editable',
       RootBlock = textbox ? RootTextBlock : RootMathBlock;
     return this.each(function() {
-      createRoot($(this), new RootBlock, textbox, editable);
+      var root = new RootBlock;
+      root.acceptedCmds = acceptedCmds;
+      createRoot($(this), root, textbox, editable);
     });
   }
 };

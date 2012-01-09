@@ -315,6 +315,18 @@ function CloseParen(open, close, replacedFragment) {
 }
 CloseParen.prototype = CloseBracket.prototype;
 
+function FnCall(replacedFragment, fn) {
+  var open = "(";
+  var close = ")";
+  var end = close;
+  this.init('\\'+fn+'(', //+'\\left(',
+    ['<span>'+fn+'</span><span class="block"><span class="paren">'+open+'</span><span class="block"></span><span class="paren">'+close+'</span></span>'],
+    [open, close],
+    replacedFragment);
+  this.end = end;//'\\right'+end;
+}
+FnCall.prototype = new Bracket;
+
 LatexCmds.rparen = CharCmds[')'] = proto(CloseParen, function(replacedFragment) {
   CloseParen.call(this, '(', ')', replacedFragment);
 });
@@ -555,8 +567,7 @@ _.renderCommand = function() {
 
   var latex = this.firstChild.latex(), cmd;
   if (latex) {
-    cmd = LatexCmds[latex];
-    if (cmd)
+    if (cmd = LatexCmds[latex])
       cmd = new cmd(this.replacedFragment, latex);
     else {
       cmd = new TextBlock(latex);

@@ -104,6 +104,7 @@ _.moveLeft = function() {
   if (this.selection)
     this.insertBefore(this.selection.prev.next || this.parent.firstChild).clearSelection();
   else {
+    this.checkFunctionName();
     if (this.prev) {
       if (this.prev.lastChild)
         this.appendTo(this.prev.lastChild)
@@ -124,6 +125,7 @@ _.moveRight = function() {
   if (this.selection)
     this.insertAfter(this.selection.next.prev || this.parent.lastChild).clearSelection();
   else {
+    this.checkFunctionName();
     if (this.next) {
       if (this.next.firstChild)
         this.prependTo(this.next.firstChild)
@@ -141,6 +143,7 @@ _.moveRight = function() {
   return this.show();
 };
 _.seek = function(target, pageX, pageY) {
+  this.checkFunctionName();
   var cursor = this.clearSelection();
   if (target.hasClass('empty')) {
     cursor.prependTo(target.data(jQueryDataKey).block);
@@ -216,8 +219,26 @@ _.writeLatex = function(latex) {
       else if (/^\\[a-z]+$/i.test(token)) {
         token = token.slice(1);
         var cmd = LatexCmds[token];
-        if (cmd)
+        if (cmd) {
           cursor.insertNew(cmd = new cmd(undefined, token));
+          //delete extra closing parenthesis that are added when pasting
+          //latex content that includes functions. There has to be a better way
+          //to deal with this issue
+          if (this.isAcceptedCmd(token)) {
+             latex.shift();
+             var count = 0;
+             for (var iPos = 0; iPos < latex.length; iPos++) {
+                if (latex[iPos] == "(")
+                   count++;
+                if (latex[iPos] == ")")
+                   count--;
+                if (count < 0) {
+                   latex = latex.slice(0, iPos).concat(latex.slice(iPos + 1, latex.length));
+                   break;
+                }
+             }
+          }
+        }
         else {
           cmd = new TextBlock(token);
           cursor.insertNew(cmd).insertAfter(cmd);
@@ -252,20 +273,60 @@ _.writeLatex = function(latex) {
 _.write = function(ch) {
   return this.show().insertCh(ch);
 };
+
+_.checkFunctionName = function(ch) {
+  if (this.checking)
+     return true;
+  this.checking = true;
+  var name = "";
+  var start = this.prev;
+  var cmd;
+  var cmdPrev;
+  var cmdName;
+  while (start && (start instanceof Variable)) {
+    name = start.text_template + name;
+    if (this.isAcceptedCmd(name)) {
+       cmd = LatexCmds[name];
+       cmdPrev = start.prev;
+       cmdName = name;
+    }
+    start = start.prev;
+  }
+  var keepCh = true;
+  if ((cmd) && (!this.isAcceptedCmd(cmdName + ch))) {
+     while (this.prev != cmdPrev)
+        this.prev = this.prev.remove().prev;
+     this.insertCh(cmdName);
+     if (ch == "(")
+        keepCh = false;
+  }
+  this.checking = false;
+  return keepCh;
+}
 _.insertCh = function(ch) {
   if (this.selection) {
     //gotta do this before this.selection is mutated by 'new cmd(this.selection)'
     this.prev = this.selection.prev;
     this.next = this.selection.next;
   }
-
+  else
+    if (!this.checkFunctionName(ch))
+      return this;
   var cmd;
   if (ch.match(/^[a-eg-zA-Z]$/)) //exclude f because want florin
     cmd = new Variable(ch);
-  else if (cmd = CharCmds[ch] || LatexCmds[ch])
+  else if ((cmd = CharCmds[ch]) && (this.isAcceptedCmd(ch)))
     cmd = new cmd(this.selection, ch);
-  else
+  else if ((cmd = LatexCmds[ch]) && (this.isAcceptedCmd(ch)))
+    cmd = new cmd(this.selection, ch);
+  else if ((ch.charAt(0) == "²") && (this.isAcceptedCmd("^"))) {
+     this.insertCh("^");
+     cmd = new VanillaSymbol("2");
+  }
+  else if ((ch.match(/^[0-9.]$/)) | (this.isAcceptedCmd(ch)))
     cmd = new VanillaSymbol(ch);
+  else
+    return this;
 
   if (this.selection) {
     if (cmd instanceof Symbol)
@@ -279,6 +340,140 @@ _.insertNew = function(cmd) {
   cmd.insertAt(this);
   return this;
 };
+_.getCmdType = function(cmd) {
+   if (!cmd)
+      return "NO";
+   if (cmd instanceof SupSub) {
+      if (cmd.cmd == "^")
+         return "SP";
+      else
+         return "SB";
+   }
+   if (cmd instanceof BinaryOperator) {
+      if (cmd.cmd === "-")
+         return "UN";
+      return "OP";
+   }
+   if (cmd instanceof VanillaSymbol) {
+      var value = cmd.text_template;
+      if (value == "")
+         return "PH";
+      if (value == ".")
+         return "PT";
+      if ((value >= 0) && (value <= 9))
+         return "NB";
+   }
+   return "VA";
+}
+_.insertPlaceholderIfNeeded = function(stayLeft) {
+  while (this.getCmdType(this.next) == "PH")
+     this.next = this.next.remove().next;
+  while (this.getCmdType(this.prev) == "PH")
+     this.prev = this.prev.remove().prev
+  var typeNext = this.getCmdType(this.next);
+  var typePrev = this.getCmdType(this.prev);
+
+  var actions = {
+     "VA": {"VA":0, "NB":1, "OP":0, "UN":0, "NO":0, "PT":1, "SP":0, "SB":0},
+     "NB": {"VA":0, "NB":0, "OP":0, "UN":0, "NO":0, "PT":0, "SP":0, "SB":0},
+     "OP": {"VA":0, "NB":0, "OP":1, "UN":0, "NO":1, "PT":1, "SP":1, "SB":1},
+     "UN": {"VA":0, "NB":0, "OP":1, "UN":1, "NO":1, "PT":1, "SP":1, "SB":1},
+     "NO": {"VA":0, "NB":0, "OP":1, "UN":0, "NO":1, "PT":1, "SP":1, "SB":1},
+     "PT": {"VA":1, "NB":0, "OP":1, "UN":1, "NO":1, "PT":2, "SP":1, "SB":1},
+     "SP": {"VA":0, "NB":1, "OP":0, "UN":0, "NO":0, "PT":1, "SP":1, "SB":1},
+     "SB": {"VA":0, "NB":1, "OP":0, "UN":0, "NO":0, "PT":1, "SP":0, "SB":1},
+  };
+  switch(actions[typePrev][typeNext]) {
+    case 0:
+      break;
+    case 1:
+      //this.show();
+      var cmd = new VanillaSymbol('', "<span class='block empty'></span>");
+      cmd.insertAt(this);
+      if (stayLeft)
+        this.hopLeft();
+      break;
+    case 2:
+      this.prev = this.prev.remove().prev;
+      break;
+  }
+}
+_.checkPlaceholder = function(onLeft, onRight) {
+  if (this.checking)
+    return;
+  this.checking = true;
+  if (onLeft) {
+    this.hopLeft();
+    this.insertPlaceholderIfNeeded(false)
+    this.hopRight();
+  }
+  if (onRight) {
+    this.insertPlaceholderIfNeeded(true);
+  }
+  this.checking = false;
+}
+_.selectToValidate = function() {
+   if (this.checking)
+      return;
+   this.checking = true;
+   var cmdType = this.getCmdType(this.selection.prev.next);
+   while ((cmdType == "OP") || (cmdType == "PT") || (cmdType == "SP") || (cmdType == "SB")) {
+     if (this.prev == this.selection.prev)
+        this.selectLeft();
+     else {
+        this.selection.prev.jQ.prependTo(this.selection.jQ);
+        this.selection.prev = this.selection.prev.prev;
+     }
+     if (!this.selection.prev)
+       break;
+     cmdType = this.getCmdType(this.selection.prev.next);
+   }
+   cmdType = this.getCmdType(this.selection.next.prev);
+   cmdTypeNext = this.getCmdType(this.selection.next);
+   while ((cmdType == "OP") || (cmdType == "PT") || (cmdTypeNext == "SP")|| (cmdTypeNext == "SB")) {
+     if (this.next == this.selection.next)
+        this.selectRight();
+     else {
+        this.selection.next.jQ.appendTo(this.selection.jQ);
+        this.selection.next = this.selection.next.next;
+      }
+      if (!this.selection.next)
+        break;
+      cmdType = this.getCmdType(this.selection.next.prev);
+      cmdTypeNext = this.getCmdType(this.selection.next);
+   }
+   this.checking = false;
+}
+_.retractLeftToValidate = function() {
+  var cmdType = this.getCmdType(this.selection.next.prev);
+  while ((cmdType == "OP") || (cmdType == "PT")) {
+    this.prev.jQ.insertAfter(this.selection.jQ);
+    this.hopLeft().selection.next = this.next;
+    if (this.selection.prev === this.prev) {
+      this.deleteSelection();
+      return false;
+    }
+    if (!this.selection.next)
+       return true;
+    cmdType = this.getCmdType(this.selection.next.prev);
+  }
+  return true;
+}
+_.retractRightToValidate = function() {
+  var cmdType = this.getCmdType(this.selection.prev.next);
+  while ((cmdType == "OP") || (cmdType == "PT") || (cmdType == "SP") || (cmdType == "SB")) {
+    this.next.jQ.insertBefore(this.selection.jQ);
+    this.hopRight().selection.prev = this.prev;
+    if (this.selection.next === this.next) {
+      this.deleteSelection();
+      return false;
+    }
+    if (!this.selection.prev)
+       return true;
+    cmdType = this.getCmdType(this.selection.prev.next);
+  }
+  return true;
+}
 _.unwrapGramp = function() {
   var gramp = this.parent.parent,
     greatgramp = gramp.parent,
@@ -348,6 +543,7 @@ _.backspace = function() {
     else
       this.unwrapGramp();
   }
+  this.checkPlaceholder(false, true);
 
   if (this.prev)
     this.prev.respace();
@@ -371,6 +567,7 @@ _.deleteForward = function() {
     else
       this.unwrapGramp();
   }
+  this.checkPlaceholder(false, true);
 
   if (this.prev)
     this.prev.respace();
@@ -435,6 +632,7 @@ _.selectLeft = function() {
       }
       else if (this.parent !== this.root) //else level up if possible
         this.insertBefore(this.parent.parent).selection.levelUp();
+      this.selectToValidate()
     }
     else { //else cursor is at right edge of selection, retract left
       this.prev.jQ.insertAfter(this.selection.jQ);
@@ -443,9 +641,12 @@ _.selectLeft = function() {
         this.deleteSelection();
         return;
       }
+      if (!this.retractLeftToValidate())
+        return;
     }
   }
   else {
+    this.checkFunctionName();
     if (this.prev)
       this.hopLeft();
     else //end of a block
@@ -455,6 +656,7 @@ _.selectLeft = function() {
         return;
 
     this.hide().selection = new Selection(this.parent, this.prev, this.next.next);
+    this.selectToValidate()
   }
   this.root.selectionChanged();
 };
@@ -467,6 +669,7 @@ _.selectRight = function() {
       }
       else if (this.parent !== this.root) //else level up if possible
         this.insertAfter(this.parent.parent).selection.levelUp();
+      this.selectToValidate()
     }
     else { //else cursor is at left edge of selection, retract right
       this.next.jQ.insertBefore(this.selection.jQ);
@@ -475,9 +678,12 @@ _.selectRight = function() {
         this.deleteSelection();
         return;
       }
+      if (!this.retractRightToValidate())
+        return;
     }
   }
   else {
+    this.checkFunctionName();
     if (this.next)
       this.hopRight();
     else //end of a block
@@ -487,6 +693,7 @@ _.selectRight = function() {
         return;
 
     this.hide().selection = new Selection(this.parent, this.prev.prev, this.next);
+    this.selectToValidate()
   }
   this.root.selectionChanged();
 };
@@ -505,9 +712,16 @@ _.deleteSelection = function() {
   this.next = this.selection.next;
   this.selection.remove();
   delete this.selection;
+
+  this.checkPlaceholder(false, true);
   this.root.selectionChanged();
   return true;
 };
+_.isAcceptedCmd = function(cmdStr) {
+  if (this.root.acceptedCmds === undefined)
+     return true;
+  return (this.root.acceptedCmds[cmdStr] === 1);
+}
 
 function Selection(parent, prev, next) {
   MathFragment.apply(this, arguments);

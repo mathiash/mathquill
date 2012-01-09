@@ -20,6 +20,7 @@ cat \
   src/cursor.js \
   src/publicapi.js \
   src/outro.js \
+  src/buttons.js \
   > build/mathquill.js
 
 if [ "$1" == "cat" ]; then
